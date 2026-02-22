@@ -8,7 +8,15 @@
 
 body {
   @apply antialiased overflow-hidden;
-  background-color: #1a472a;
+  background: radial-gradient(circle at center, #0093E9 0%, #80D0C7 100%);
+}
+
+/* Mediterranean Theme Overrides */
+:root {
+  --sea-blue: #0077be;
+  --sand: #f4f1ea;
+  --terracotta: #e2725b;
+  --turquoise: #40e0d0;
 }
 
 /* Custom scrollbar for game feel if needed */

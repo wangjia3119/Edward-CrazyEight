@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw, Trophy, AlertCircle, ChevronRight, Info } from 'lucide-react';
+import { RefreshCw, Trophy, AlertCircle, ChevronRight, Info, Languages } from 'lucide-react';
 import { Card, Suit, GameStatus } from './types';
 import { createDeck, canPlayCard, getSuitSymbol, getSuitColor } from './utils';
+import { translations, Language } from './i18n';
 
 const INITIAL_HAND_SIZE = 8;
 
 export default function App() {
+  const [language, setLanguage] = useState<Language>('en');
   const [deck, setDeck] = useState<Card[]>([]);
   const [discardPile, setDiscardPile] = useState<Card[]>([]);
   const [playerHand, setPlayerHand] = useState<Card[]>([]);
@@ -14,7 +16,15 @@ export default function App() {
   const [currentTurn, setCurrentTurn] = useState<'player' | 'ai'>('player');
   const [currentSuit, setCurrentSuit] = useState<Suit | null>(null);
   const [status, setStatus] = useState<GameStatus>('home');
-  const [message, setMessage] = useState<string>("Welcome to Crazy Eights!");
+  const [message, setMessage] = useState<string>("");
+
+  const t = translations[language];
+
+  useEffect(() => {
+    if (status === 'home') {
+      setMessage(t.welcome);
+    }
+  }, [language, status, t.welcome]);
 
   // Initialize Game
   const initGame = useCallback(() => {
@@ -22,7 +32,6 @@ export default function App() {
     const pHand = newDeck.splice(0, INITIAL_HAND_SIZE);
     const aHand = newDeck.splice(0, INITIAL_HAND_SIZE);
     
-    // Ensure the first discard is not an 8 for simplicity, or handle it
     let firstDiscard = newDeck.pop()!;
     while (firstDiscard.rank === '8') {
       newDeck.unshift(firstDiscard);
@@ -36,17 +45,17 @@ export default function App() {
     setCurrentTurn('player');
     setCurrentSuit(null);
     setStatus('playing');
-    setMessage("Match the suit or rank!");
-  }, []);
+    setMessage(t.matchMsg);
+  }, [t.matchMsg]);
 
-  useEffect(() => {
-    // Don't auto-init, wait for user to start
-  }, []);
+  const toggleLanguage = () => {
+    setLanguage(prev => prev === 'en' ? 'zh' : 'en');
+  };
 
   const checkWinCondition = (hand: Card[], turn: 'player' | 'ai') => {
     if (hand.length === 0) {
       setStatus(turn === 'player' ? 'won' : 'lost');
-      setMessage(turn === 'player' ? "Congratulations! You won!" : "AI won! Better luck next time.");
+      setMessage(turn === 'player' ? t.victory : t.defeat);
       return true;
     }
     return false;
@@ -54,7 +63,7 @@ export default function App() {
 
   const drawCard = (turn: 'player' | 'ai') => {
     if (deck.length === 0) {
-      setMessage("Deck is empty! Skipping turn.");
+      setMessage(t.deckEmpty);
       setCurrentTurn(turn === 'player' ? 'ai' : 'player');
       return;
     }
@@ -65,19 +74,15 @@ export default function App() {
 
     if (turn === 'player') {
       setPlayerHand([...playerHand, card]);
-      setMessage("You drew a card.");
-      // In Crazy Eights, usually if you draw you can play it if it matches, 
-      // but for simplicity we'll just end the turn or let them play.
-      // Let's follow the rule: if you draw, and it's playable, you can play it.
-      // But many versions just end the turn. Let's allow playing if it matches.
+      setMessage(t.playerDrew);
     } else {
       setAiHand([...aiHand, card]);
-      setMessage("AI drew a card.");
+      setMessage(t.aiDrew);
       setCurrentTurn('player');
     }
   };
 
-  const playCard = (card: Card, turn: 'player' | 'ai', selectedSuit?: Suit) => {
+  const playCard = (card: Card, turn: 'player' | 'ai') => {
     const topCard = discardPile[discardPile.length - 1];
     
     if (!canPlayCard(card, topCard, currentSuit)) return;
@@ -89,12 +94,12 @@ export default function App() {
       
       if (card.rank === '8') {
         setStatus('waiting_for_suit');
-        setMessage("Choose a new suit!");
+        setMessage(t.chooseSuit);
       } else {
         setCurrentSuit(null);
         if (!checkWinCondition(newHand, 'player')) {
           setCurrentTurn('ai');
-          setMessage("AI is thinking...");
+          setMessage(t.aiThinking);
         }
       }
     } else {
@@ -103,16 +108,17 @@ export default function App() {
       setDiscardPile([...discardPile, card]);
       
       if (card.rank === '8') {
-        // AI logic for choosing suit: most frequent suit in hand
         const suits = newHand.map(c => c.suit);
         const mostFrequentSuit = suits.sort((a,b) =>
           suits.filter(v => v===a).length - suits.filter(v => v===b).length
         ).pop() || 'hearts';
         setCurrentSuit(mostFrequentSuit as Suit);
-        setMessage(`AI played 8 and changed suit to ${mostFrequentSuit}!`);
+        const suitName = (t as any)[mostFrequentSuit];
+        setMessage(t.aiChangedSuit.replace('{suit}', suitName));
       } else {
         setCurrentSuit(null);
-        setMessage(`AI played ${card.rank} of ${card.suit}.`);
+        const suitName = (t as any)[card.suit];
+        setMessage(t.aiPlayed.replace('{rank}', card.rank).replace('{suit}', suitName));
       }
 
       if (!checkWinCondition(newHand, 'ai')) {
@@ -129,7 +135,6 @@ export default function App() {
         const playableCards = aiHand.filter(c => canPlayCard(c, topCard, currentSuit));
 
         if (playableCards.length > 0) {
-          // AI Strategy: Play non-8s first
           const normalCards = playableCards.filter(c => c.rank !== '8');
           const cardToPlay = normalCards.length > 0 ? normalCards[0] : playableCards[0];
           playCard(cardToPlay, 'ai');
@@ -145,20 +150,33 @@ export default function App() {
     setCurrentSuit(suit);
     setStatus('playing');
     setCurrentTurn('ai');
-    setMessage(`You changed suit to ${suit}. AI's turn.`);
+    const suitName = (t as any)[suit];
+    setMessage(t.playerChangedSuit.replace('{suit}', suitName));
   };
 
   const topCard = discardPile[discardPile.length - 1];
 
   if (status === 'home') {
     return (
-      <div className="min-h-screen bg-[#1a472a] text-white font-sans flex flex-col items-center justify-center p-4 overflow-hidden relative">
+      <div className="min-h-screen bg-gradient-to-br from-[#0093E9] to-[#80D0C7] text-white font-sans flex flex-col items-center justify-center p-4 overflow-hidden relative">
+        {/* Decorative Sun */}
+        <div className="absolute -top-20 -right-20 w-64 h-64 bg-yellow-200/20 rounded-full blur-3xl animate-pulse" />
+        
+        {/* Language Toggle */}
+        <button 
+          onClick={toggleLanguage}
+          className="absolute top-8 right-8 flex items-center gap-2 bg-white/20 backdrop-blur-md hover:bg-white/30 px-4 py-2 rounded-full transition-colors z-50 border border-white/20 shadow-lg"
+        >
+          <Languages className="w-4 h-4" />
+          <span className="text-sm font-bold">{language === 'en' ? '中文' : 'English'}</span>
+        </button>
+
         {/* Background Decorations */}
-        <div className="absolute top-10 left-10 opacity-10 rotate-12">
-          <div className="w-32 h-48 bg-white rounded-2xl border-4 border-white/20" />
+        <div className="absolute top-10 left-10 opacity-20 rotate-12">
+          <div className="w-32 h-48 bg-white/80 backdrop-blur-sm rounded-2xl border-4 border-white/40 shadow-2xl" />
         </div>
-        <div className="absolute bottom-10 right-10 opacity-10 -rotate-12">
-          <div className="w-32 h-48 bg-white rounded-2xl border-4 border-white/20" />
+        <div className="absolute bottom-10 right-10 opacity-20 -rotate-12">
+          <div className="w-32 h-48 bg-white/80 backdrop-blur-sm rounded-2xl border-4 border-white/40 shadow-2xl" />
         </div>
 
         <motion.div 
@@ -167,50 +185,50 @@ export default function App() {
           className="text-center z-10"
         >
           <motion.div
-            animate={{ rotate: [0, -5, 5, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+            animate={{ rotate: [0, -5, 5, 0], y: [0, -10, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
             className="inline-block mb-8"
           >
             <div className="relative">
-              <div className="w-24 h-36 bg-white rounded-xl shadow-2xl flex items-center justify-center text-slate-900 border-2 border-slate-200 transform -rotate-12 translate-x-4">
-                <span className="text-4xl font-black text-red-500">8</span>
+              <div className="w-24 h-36 bg-white rounded-xl shadow-2xl flex items-center justify-center text-slate-900 border-2 border-slate-100 transform -rotate-12 translate-x-4">
+                <span className="text-4xl font-black text-orange-500">8</span>
               </div>
-              <div className="absolute top-0 left-0 w-24 h-36 bg-white rounded-xl shadow-2xl flex items-center justify-center text-slate-900 border-2 border-slate-200 transform rotate-12 -translate-x-4">
-                <span className="text-4xl font-black">8</span>
+              <div className="absolute top-0 left-0 w-24 h-36 bg-white rounded-xl shadow-2xl flex items-center justify-center text-slate-900 border-2 border-slate-100 transform rotate-12 -translate-x-4">
+                <span className="text-4xl font-black text-sky-600">8</span>
               </div>
             </div>
           </motion.div>
 
-          <h1 className="text-6xl md:text-8xl font-black tracking-tighter mb-4 drop-shadow-2xl">
-            CRAZY <span className="text-emerald-400">EIGHTS</span>
+          <h1 className="text-6xl md:text-8xl font-black tracking-tighter mb-4 drop-shadow-2xl text-white">
+            {t.title.split(' ')[0]} <span className="text-yellow-300">{t.title.split(' ')[1] || ''}</span>
           </h1>
-          <p className="text-xl md:text-2xl font-medium text-emerald-100/60 mb-12 tracking-wide uppercase">
-            The Classic Card Game
+          <p className="text-xl md:text-2xl font-medium text-white/80 mb-12 tracking-wide uppercase">
+            {t.subtitle}
           </p>
 
           <div className="flex flex-col gap-4 items-center">
             <motion.button
-              whileHover={{ scale: 1.05 }}
+              whileHover={{ scale: 1.05, backgroundColor: '#ffffff' }}
               whileTap={{ scale: 0.95 }}
               onClick={initGame}
-              className="px-12 py-5 bg-white text-slate-900 rounded-2xl font-black text-2xl shadow-[0_10px_0_0_#cbd5e1] hover:shadow-[0_5px_0_0_#cbd5e1] hover:translate-y-[5px] transition-all flex items-center gap-3"
+              className="px-12 py-5 bg-white/90 backdrop-blur-md text-sky-900 rounded-2xl font-black text-2xl shadow-xl hover:shadow-2xl transition-all flex items-center gap-3 border border-white/50"
             >
-              START GAME
+              {t.startGame}
               <ChevronRight className="w-8 h-8" />
             </motion.button>
             
             <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-8 text-left max-w-3xl">
-              <div className="bg-black/20 p-6 rounded-2xl border border-white/5">
-                <h3 className="font-bold text-emerald-400 mb-2 uppercase text-xs tracking-widest">The Goal</h3>
-                <p className="text-sm text-emerald-100/70">Be the first to get rid of all your cards.</p>
+              <div className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 shadow-lg">
+                <h3 className="font-bold text-yellow-300 mb-2 uppercase text-xs tracking-widest">{t.goalTitle}</h3>
+                <p className="text-sm text-white/90">{t.goalDesc}</p>
               </div>
-              <div className="bg-black/20 p-6 rounded-2xl border border-white/5">
-                <h3 className="font-bold text-emerald-400 mb-2 uppercase text-xs tracking-widest">Matching</h3>
-                <p className="text-sm text-emerald-100/70">Match the top card's suit or rank to play.</p>
+              <div className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 shadow-lg">
+                <h3 className="font-bold text-yellow-300 mb-2 uppercase text-xs tracking-widest">{t.matchingTitle}</h3>
+                <p className="text-sm text-white/90">{t.matchingDesc}</p>
               </div>
-              <div className="bg-black/20 p-6 rounded-2xl border border-white/5">
-                <h3 className="font-bold text-emerald-400 mb-2 uppercase text-xs tracking-widest">Wild 8s</h3>
-                <p className="text-sm text-emerald-100/70">8s are wild! Play them anytime to change the suit.</p>
+              <div className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 shadow-lg">
+                <h3 className="font-bold text-yellow-300 mb-2 uppercase text-xs tracking-widest">{t.wild8Title}</h3>
+                <p className="text-sm text-white/90">{t.wild8Desc}</p>
               </div>
             </div>
           </div>
@@ -221,17 +239,24 @@ export default function App() {
 
   if (!topCard) {
     return (
-      <div className="min-h-screen bg-[#1a472a] flex items-center justify-center text-white">
+      <div className="min-h-screen bg-gradient-to-br from-[#0093E9] to-[#80D0C7] flex items-center justify-center text-white">
         <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="w-8 h-8 animate-spin text-emerald-400" />
-          <p className="font-mono text-sm tracking-widest opacity-60 uppercase">Shuffling Deck...</p>
+          <RefreshCw className="w-8 h-8 animate-spin text-yellow-300" />
+          <p className="font-mono text-sm tracking-widest opacity-80 uppercase">{t.shuffling}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#1a472a] text-white font-sans p-4 md:p-8 flex flex-col items-center justify-between overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-[#0093E9] to-[#80D0C7] text-white font-sans p-4 md:p-8 flex flex-col items-center justify-between overflow-hidden relative">
+      {/* Decorative Waves */}
+      <div className="absolute bottom-0 left-0 w-full h-32 opacity-20 pointer-events-none">
+        <svg viewBox="0 0 1440 320" className="w-full h-full preserve-3d">
+          <path fill="#ffffff" d="M0,192L48,197.3C96,203,192,213,288,229.3C384,245,480,267,576,250.7C672,235,768,181,864,181.3C960,181,1056,235,1152,234.7C1248,235,1344,181,1392,154.7L1440,128L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path>
+        </svg>
+      </div>
+
       {/* Header */}
       <div className="w-full max-w-4xl flex justify-between items-center mb-4">
         <div className="flex items-center gap-2">
@@ -241,14 +266,21 @@ export default function App() {
               onClick={initGame}
             />
           </div>
-          <h1 className="text-xl font-bold tracking-tight">CRAZY EIGHTS</h1>
+          <h1 className="text-xl font-bold tracking-tight">{t.title}</h1>
+          <button 
+            onClick={toggleLanguage}
+            className="ml-4 bg-white/10 hover:bg-white/20 p-2 rounded-lg transition-colors"
+            title={language === 'en' ? '切换到中文' : 'Switch to English'}
+          >
+            <Languages className="w-4 h-4" />
+          </button>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-sm font-mono bg-black/20 px-3 py-1 rounded-full border border-white/10">
-            DECK: {deck.length}
+            {t.deck}: {deck.length}
           </div>
-          <div className={`text-sm font-bold px-4 py-1 rounded-full transition-colors ${currentTurn === 'player' ? 'bg-emerald-500' : 'bg-amber-500'}`}>
-            {currentTurn === 'player' ? 'YOUR TURN' : 'AI TURN'}
+          <div className={`text-sm font-bold px-4 py-1 rounded-full transition-colors ${currentTurn === 'player' ? 'bg-sky-500' : 'bg-orange-400'}`}>
+            {currentTurn === 'player' ? t.yourTurn : t.aiTurn}
           </div>
         </div>
       </div>
@@ -269,7 +301,7 @@ export default function App() {
           ))}
         </div>
         <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black/40 px-3 py-1 rounded-full text-xs font-mono border border-white/10">
-          AI HAND: {aiHand.length}
+          {t.aiHand}: {aiHand.length}
         </div>
       </div>
 
@@ -285,7 +317,7 @@ export default function App() {
           </div>
           {deck.length > 1 && <div className="absolute top-1 left-1 w-full h-full bg-slate-800 rounded-2xl border-2 border-slate-700 -z-10" />}
           {deck.length > 2 && <div className="absolute top-2 left-2 w-full h-full bg-slate-800 rounded-2xl border-2 border-slate-700 -z-20" />}
-          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs font-mono opacity-60 uppercase tracking-widest">Draw Pile</div>
+          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs font-mono opacity-60 uppercase tracking-widest">{t.drawPile}</div>
         </div>
 
         {/* Discard Pile */}
@@ -320,17 +352,17 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               className="absolute -top-12 left-1/2 -translate-x-1/2 bg-white text-slate-900 px-4 py-1 rounded-full shadow-lg flex items-center gap-2 whitespace-nowrap"
             >
-              <span className="text-xs font-bold uppercase">Target Suit:</span>
+              <span className="text-xs font-bold uppercase">{t.targetSuit}:</span>
               <span className={`text-xl ${getSuitColor(currentSuit)}`}>{getSuitSymbol(currentSuit)}</span>
             </motion.div>
           )}
-          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs font-mono opacity-60 uppercase tracking-widest">Discard</div>
+          <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 text-xs font-mono opacity-60 uppercase tracking-widest">{t.discard}</div>
         </div>
       </div>
 
       {/* Status Message */}
-      <div className="my-6 px-6 py-2 bg-black/30 rounded-full border border-white/10 flex items-center gap-3">
-        <Info className="w-4 h-4 text-emerald-400" />
+      <div className="my-6 px-6 py-2 bg-white/20 backdrop-blur-md rounded-full border border-white/20 flex items-center gap-3 shadow-lg">
+        <Info className="w-4 h-4 text-sky-200" />
         <p className="text-sm font-medium tracking-wide">{message}</p>
       </div>
 
@@ -346,7 +378,7 @@ export default function App() {
                 whileHover={playable ? { y: -30, scale: 1.1, zIndex: 50 } : {}}
                 onClick={() => playable && playCard(card, 'player')}
                 className={`w-20 h-28 md:w-28 md:h-40 bg-white rounded-xl border-2 shadow-xl flex flex-col p-2 md:p-3 text-slate-900 cursor-pointer transition-all ${
-                  playable ? 'border-emerald-400 ring-4 ring-emerald-400/20' : 'border-slate-200 opacity-80 grayscale-[0.3]'
+                  playable ? 'border-sky-400 ring-4 ring-sky-400/30' : 'border-slate-100 opacity-80 grayscale-[0.2]'
                 }`}
               >
                 <div className={`text-lg md:text-xl font-bold leading-none ${getSuitColor(card.suit)}`}>
@@ -383,8 +415,8 @@ export default function App() {
               animate={{ scale: 1, y: 0 }}
               className="bg-slate-900 border border-white/10 rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center"
             >
-              <h2 className="text-2xl font-bold mb-2">Wildcard 8!</h2>
-              <p className="text-slate-400 mb-8">Choose the new suit to play:</p>
+              <h2 className="text-2xl font-bold mb-2">{t.wildcardTitle}</h2>
+              <p className="text-slate-400 mb-8">{t.wildcardDesc}</p>
               <div className="grid grid-cols-2 gap-4">
                 {(['hearts', 'diamonds', 'clubs', 'spades'] as Suit[]).map((suit) => (
                   <button
@@ -395,7 +427,7 @@ export default function App() {
                     <span className={`text-4xl mb-2 group-hover:scale-125 transition-transform ${getSuitColor(suit)}`}>
                       {getSuitSymbol(suit)}
                     </span>
-                    <span className="text-xs font-bold uppercase tracking-widest opacity-60">{suit}</span>
+                    <span className="text-xs font-bold uppercase tracking-widest opacity-60">{(t as any)[suit]}</span>
                   </button>
                 ))}
               </div>
@@ -429,18 +461,16 @@ export default function App() {
                 )}
               </div>
               <h2 className="text-4xl font-black mb-4 tracking-tight">
-                {status === 'won' ? 'VICTORY!' : 'DEFEAT'}
+                {status === 'won' ? t.victory : t.defeat}
               </h2>
               <p className="text-slate-400 mb-10 leading-relaxed">
-                {status === 'won' 
-                  ? "You played your cards right and cleared your hand first. Excellent strategy!" 
-                  : "The AI outplayed you this time. Don't worry, even the best players lose sometimes."}
+                {status === 'won' ? t.winMsg : t.loseMsg}
               </p>
               <button
                 onClick={initGame}
                 className="w-full py-4 bg-white text-slate-900 rounded-2xl font-bold text-lg hover:bg-slate-200 transition-colors flex items-center justify-center gap-2"
               >
-                PLAY AGAIN
+                {t.playAgain}
                 <ChevronRight className="w-5 h-5" />
               </button>
             </motion.div>
